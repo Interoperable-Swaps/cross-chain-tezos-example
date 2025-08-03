@@ -8,8 +8,6 @@ const bool = z
     .pipe(z.boolean())
 
 const ConfigSchema = z.object({
-    SRC_CHAIN_RPC: z.string().url(),
-    DST_CHAIN_RPC: z.string().url(),
     SRC_CHAIN_CREATE_FORK: bool.default('true'),
     DST_CHAIN_CREATE_FORK: bool.default('true')
 })
@@ -20,7 +18,7 @@ export const config = {
     chain: {
         source: {
             chainId: Sdk.NetworkEnum.ETHEREUM,
-            url: fromEnv.SRC_CHAIN_RPC,
+            url: "https://eth.merkle.io",
             createFork: fromEnv.SRC_CHAIN_CREATE_FORK,
             limitOrderProtocol: '0x111111125421ca6dc452d289314280a0f8842a65',
             wrappedNative: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
@@ -34,7 +32,7 @@ export const config = {
         },
         destination: {
             chainId: Sdk.NetworkEnum.BINANCE,
-            url: fromEnv.DST_CHAIN_RPC,
+            url: "wss://bsc-rpc.publicnode.com",
             createFork: fromEnv.DST_CHAIN_CREATE_FORK,
             limitOrderProtocol: '0x111111125421ca6dc452d289314280a0f8842a65',
             wrappedNative: '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c',
