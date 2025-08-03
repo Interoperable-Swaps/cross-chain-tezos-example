@@ -4,7 +4,7 @@ import {expect, jest} from '@jest/globals'
 import {createServer, CreateServerReturnType} from 'prool'
 import {anvil} from 'prool/instances'
 
-import Sdk from '@1inch/cross-chain-sdk'
+import Sdk, { Immutables } from '@1inch/cross-chain-sdk'
 import {
     computeAddress,
     ContractFactory,
@@ -26,7 +26,7 @@ import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json'
 
 import taquito from '@taquito/taquito';
 import InMemorySigner  from "@taquito/signer";
-
+import axios from 'axios';
 
 const {Address} = Sdk
 
@@ -79,8 +79,6 @@ describe('Resolving example', () => {
     }
 
     beforeAll(async () => {
-
-        console.log(config.chain.destination);
 
         ;[src] = await Promise.all([initChain(config.chain.source)])
 
@@ -189,17 +187,17 @@ describe('Resolving example', () => {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
                     timeLocks: Sdk.TimeLocks.new({
                         srcWithdrawal: 10n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
-                        srcCancellation: 121n, // 1sec public withdrawal
-                        srcPublicCancellation: 122n, // 1sec private cancellation
+                        srcPublicWithdrawal: 220n, // 2m for private withdrawal
+                        srcCancellation: 421n, // 1sec public withdrawal
+                        srcPublicCancellation: 522n, // 1sec private cancellation
                         dstWithdrawal: 10n, // 10sec finality lock for test
                         dstPublicWithdrawal: 100n, // 100sec private withdrawal
                         dstCancellation: 101n // 1sec public withdrawal
                     }),
                     srcChainId,
                     dstChainId,
-                    srcSafetyDeposit: parseEther('0.001'),
-                    dstSafetyDeposit: parseEther('0.001')
+                    srcSafetyDeposit: 10000000n,
+                    dstSafetyDeposit: 10000000n
                 },
                 {
                     auction: new Sdk.AuctionDetails({
@@ -226,7 +224,7 @@ describe('Resolving example', () => {
             const signature = await srcChainUser.signOrder(srcChainId, order)
             const orderHash = order.getOrderHash(srcChainId)
             // // Resolver fills order
-            const resolverContract = new Resolver(src.resolver, dst.resolver)
+            const resolverContract = new Resolver(src.resolver, "")
 
             console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
 
@@ -249,49 +247,121 @@ describe('Resolving example', () => {
             const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
 
             const dstImmutables = srcEscrowEvent[0]
-                .withComplement(srcEscrowEvent[1])
-                .withTaker(new Address(resolverContract.dstAddress))
+                .withComplement(srcEscrowEvent[1]);
+
+            console.log(dstImmutables);
 
             console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
 
+            // Deploying Dst Escrow Factory 
 
+            const tezosTokenContract = await dstChainResolver.contract.at(tezosTokenContractAddress);
 
-            // const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await dstChainResolver.send(
-            //     resolverContract.deployDst(dstImmutables)
-            // )
-            // console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
+            const approveOperation = await tezosTokenContract.methods.approve(tezosEscrowDstFactoryContractAddress, dstImmutables.amount).send();
 
-            // const ESCROW_SRC_IMPLEMENTATION = await srcFactory.getSourceImpl()
-            // const ESCROW_DST_IMPLEMENTATION = await dstFactory.getDestinationImpl()
+            console.log("Resolver Approve operation:", approveOperation.hash);
 
-            // const srcEscrowAddress = new Sdk.EscrowFactory(new Address(src.escrowFactory)).getSrcEscrowAddress(
-            //     srcEscrowEvent[0],
-            //     ESCROW_SRC_IMPLEMENTATION
-            // )
+            const tezosEscrowDstFactory = await dstChainResolver.contract.at(tezosEscrowDstFactoryContractAddress);
 
-            // const dstEscrowAddress = new Sdk.EscrowFactory(new Address(dst.escrowFactory)).getDstEscrowAddress(
-            //     srcEscrowEvent[0],
-            //     srcEscrowEvent[1],
-            //     dstDeployedAt,
-            //     new Address(resolverContract.dstAddress),
-            //     ESCROW_DST_IMPLEMENTATION
-            // )
+            // Prevent Nounce in PAST ERROR
+            await sleep(2000 * 6);
 
-            // await increaseTime(11)
-            // // User shares key after validation of dst escrow deployment
-            // console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
-            // await dstChainResolver.send(
-            //     resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
-            // )
+            // DstCancellation nat
+            // DstPublicWithdrawal nat
+            // DstWithdrawal nat
+            // amount nat
+            // hash bytes
+            // maker address
+            // orderHash bytes
+            // safetyDeposit mutez
+            // srcCancellationTimestamp timestamp
+            // taker address
+            // token address
+            // tokenId nat
+            // tokenType bool
 
-            // console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
-            // const {txHash: resolverWithdrawHash} = await srcChainResolver.send(
-            //     resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
-            // )
-            // console.log(
-            //     `[${srcChainId}]`,
-            //     `Withdrew funds for resolver from ${srcEscrowAddress} to ${src.resolver} in tx ${resolverWithdrawHash}`
-            // )
+            const DstCancellation = 2000; 
+            const DstPublicWithdrawal = 1000; 
+            const DstWithdrawal = 10;
+
+            const makerAddress = await dstChainUser.signer.publicKeyHash();
+            const takerAddress = await dstChainResolver.signer.publicKeyHash();
+            const srcCancellationTimestamp = 100;
+
+            // console.log(DstCancellation,
+            //     DstPublicWithdrawal,
+            //     DstWithdrawal,
+            //     dstImmutables.hashLock.toString(),
+            //     makerAddress,
+            //     dstImmutables.orderHash,
+            //     dstImmutables.safetyDeposit,
+            //     srcCancellationTimestamp,
+            //     takerAddress,
+            //     tezosTokenContractAddress,
+            //     0,
+            //     false);
+
+            const deployOperation = await tezosEscrowDstFactory.methods.deployEscrowDst(
+                DstCancellation,
+                DstPublicWithdrawal,
+                DstWithdrawal,
+                dstImmutables.amount,
+                dstImmutables.hashLock.toString(),
+                makerAddress,
+                dstImmutables.orderHash,
+                dstImmutables.safetyDeposit,
+                srcCancellationTimestamp,
+                takerAddress,
+                tezosTokenContractAddress,
+                0,
+                false
+            ).send({amount: 10000000, mutez: true});
+
+            console.log("Dst Escrow Factory deploy operation:", deployOperation.hash);
+    
+            const ESCROW_SRC_IMPLEMENTATION = await srcFactory.getSourceImpl()
+
+            const srcEscrowAddress = new Sdk.EscrowFactory(new Address(src.escrowFactory)).getSrcEscrowAddress(
+                srcEscrowEvent[0],
+                ESCROW_SRC_IMPLEMENTATION
+            )
+
+            // Getting Deployment Address from exnternal API with validation 
+            await sleep(2000 * 5);
+
+            const api_resonse = await axios.get(
+            `https://api.ghostnet.tzkt.io/v1/contracts/events?contract=KT18hT9tJ1qXRpNg3tj7QFbNsddDHv1qgipG&tag=deployedDstEscrow&limit=1&sort.desc=id`,
+            );
+
+            console.log("API response:", api_resonse.data);
+            
+            let dstEscrowAddress = "";
+
+            if (`0x${api_resonse.data[0].payload.orderHash}` != dstImmutables.hashLock.toString()) {
+                console.log("Event Not Found");
+            } else {
+                console.log(api_resonse.data[0]);
+                dstEscrowAddress = api_resonse.data[0].payload.newEscrow;
+                console.log("Deployed Escrow", dstEscrowAddress);
+            }            
+        
+            // User shares key after validation of dst escrow deployment
+            console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
+            
+            const dstEscrowContract = await dstChainResolver.contract.at(dstEscrowAddress);
+
+            const userWithdrawOperation = await dstEscrowContract.methods.withdraw(secret).send();
+
+            console.log("Users funds withdraw on destination chain", userWithdrawOperation.hash);
+
+            console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
+            const {txHash: resolverWithdrawHash} = await srcChainResolver.send(
+                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
+            )
+            console.log(
+                `[${srcChainId}]`,
+                `Withdrew funds for resolver from ${srcEscrowAddress} to ${src.resolver} in tx ${resolverWithdrawHash}`
+            )
 
             // const resultBalances = await getBalances(
             //     config.chain.source.tokens.USDC.address,
@@ -392,4 +462,9 @@ async function deploy(
     await deployed.waitForDeployment()
 
     return await deployed.getAddress()
+}
+
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
